@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pokédex — First 100</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading-screen" role="status" aria-live="polite" aria-label="Loading Pokémon data">
+    <div class="loading-ball">
+      <div class="ball-top"></div>
+      <div class="ball-bottom"></div>
+      <div class="ball-center"></div>
+    </div>
+    <p id="load-progress" class="loading-text">Catching Pokémon… 0 / 100</p>
+    <div class="loading-progress-track">
+      <div id="loading-progress-fill" class="loading-progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="site-header">
+    <div class="pokeball-logo" aria-hidden="true">
+      <div class="ball-top"></div>
+      <div class="ball-bottom"></div>
+      <div class="ball-center"></div>
+    </div>
+    <h1>Pokédex</h1>
+    <span class="subtitle">Generation I · #001 – #100</span>
+  </header>
+
+  <!-- App shell -->
+  <div class="app-shell">
+
+    <!-- Sidebar / Filters -->
+    <aside class="sidebar" id="sidebar">
+
+      <!-- Mobile toggle button -->
+      <button class="mobile-filter-toggle" id="mobile-filter-toggle" aria-expanded="false" aria-controls="sidebar-inner">
+        Filters &amp; Sort
+        <span class="toggle-arrow" aria-hidden="true">▼</span>
+      </button>
+
+      <div class="sidebar-inner" id="sidebar-inner">
+
+        <!-- Sort -->
+        <section aria-labelledby="sort-heading">
+          <h2 id="sort-heading">Sort By</h2>
+          <select id="sort-select" class="sort-select" aria-label="Sort Pokémon by">
+            <option value="id">Pokédex Number</option>
+            <option value="name-asc">Name A → Z</option>
+            <option value="name-desc">Name Z → A</option>
+            <option value="hp">Highest HP</option>
+            <option value="attack">Highest Attack</option>
+            <option value="defense">Highest Defense</option>
+            <option value="speed">Highest Speed</option>
+          </select>
+        </section>
+
+        <!-- Type filter -->
+        <section aria-labelledby="type-filter-heading">
+          <h2 id="type-filter-heading">Filter by Type</h2>
+          <div id="type-filter-list" role="group" aria-labelledby="type-filter-heading">
+            <!-- Populated dynamically by app.js after data loads -->
+          </div>
+        </section>
+
+        <!-- Evolution stage filter -->
+        <section aria-labelledby="stage-filter-heading">
+          <h2 id="stage-filter-heading">Evolution Stage</h2>
+          <div class="stage-filter-list" role="group" aria-labelledby="stage-filter-heading">
+            <label class="stage-filter-label">
+              <input type="checkbox" class="stage-checkbox" value="1">
+              <span>Basic (no pre-evolution)</span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="stage-checkbox" value="2">
+              <span>Stage 1</span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="stage-checkbox" value="3">
+              <span>Stage 2 (final)</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- Reset -->
+        <section>
+          <button id="reset-filters">Reset All Filters</button>
+        </section>
+
+      </div><!-- /sidebar-inner -->
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+      <div class="results-bar" id="results-bar" aria-live="polite">
+        Showing <span class="results-count" id="results-count">0</span> Pokémon
+      </div>
+      <div id="pokemon-grid" role="list" aria-label="Pokémon cards"></div>
+    </main>
+
+  </div><!-- /app-shell -->
+
+  <!-- TCG Card Modal -->
+  <div id="card-modal" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="modal-pokemon-name">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-container">
+      <button class="modal-close-btn" id="modal-close-btn" aria-label="Close detail card">✕</button>
+      <button class="modal-nav-btn modal-nav-prev" id="modal-nav-prev" aria-label="Previous Pokémon">&#8249;</button>
+      <div id="tcg-card-inner">
+        <!-- Populated dynamically by app.js -->
+      </div>
+      <button class="modal-nav-btn modal-nav-next" id="modal-nav-next" aria-label="Next Pokémon">&#8250;</button>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
