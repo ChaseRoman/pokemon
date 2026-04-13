@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pokédex — First 100</title>
+  <title>Pokédex</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -29,7 +29,11 @@
       <div class="ball-center"></div>
     </div>
     <h1>Pokédex</h1>
-    <span class="subtitle">Generation I · #001 – #100</span>
+    <nav class="header-nav" aria-label="App sections">
+      <button class="nav-tab nav-tab--active" data-view="pokedex" id="tab-pokedex">Pokédex</button>
+      <button class="nav-tab" data-view="battle" id="tab-battle">⚔ Battle</button>
+    </nav>
+    <span class="subtitle">Generation I · #001 – #151</span>
   </header>
 
   <!-- App shell -->
@@ -58,6 +62,49 @@
             <option value="defense">Highest Defense</option>
             <option value="speed">Highest Speed</option>
           </select>
+        </section>
+
+        <!-- Generation filter -->
+        <section aria-labelledby="gen-filter-heading">
+          <h2 id="gen-filter-heading">Generation</h2>
+          <div class="gen-filter-list" id="gen-filter-list" role="group" aria-labelledby="gen-filter-heading">
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="1" checked>
+              <span>Gen I <span class="gen-range">#001–#151</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="2">
+              <span>Gen II <span class="gen-range">#152–#251</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="3">
+              <span>Gen III <span class="gen-range">#252–#386</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="4">
+              <span>Gen IV <span class="gen-range">#387–#493</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="5">
+              <span>Gen V <span class="gen-range">#494–#649</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="6">
+              <span>Gen VI <span class="gen-range">#650–#721</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="7">
+              <span>Gen VII <span class="gen-range">#722–#809</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="8">
+              <span>Gen VIII <span class="gen-range">#810–#905</span></span>
+            </label>
+            <label class="stage-filter-label">
+              <input type="checkbox" class="gen-checkbox" value="9">
+              <span>Gen IX <span class="gen-range">#906–#1025</span></span>
+            </label>
+          </div>
         </section>
 
         <!-- Type filter -->
@@ -104,6 +151,144 @@
     </main>
 
   </div><!-- /app-shell -->
+
+  <!-- Battle Section -->
+  <section id="battle-section" class="battle-section" hidden aria-label="Pokémon Battle">
+
+    <!-- Streak counter -->
+    <div class="battle-streak" id="battle-streak" hidden>
+      <span class="battle-streak-flame" aria-hidden="true">🔥</span>
+      <span class="battle-streak-count" id="battle-streak-count">0</span>
+      <span class="battle-streak-label">/ 10 streak</span>
+    </div>
+
+    <!-- Start state -->
+    <div class="battle-start" id="battle-start">
+      <div class="battle-start-inner">
+        <h2 class="battle-title">Wild Battle!</h2>
+        <p class="battle-subtitle">Two random Pokémon are about to face off</p>
+
+        <!-- Pool filters -->
+        <div class="battle-pool-filters" id="battle-pool-filters">
+          <button class="battle-filter-toggle" id="battle-filter-toggle" aria-expanded="false">
+            Filter Pool <span class="battle-filter-toggle-arrow" aria-hidden="true">▼</span>
+          </button>
+          <div class="battle-filter-panel" id="battle-filter-panel" hidden>
+            <div class="battle-filter-row">
+              <span class="battle-filter-section-label">Generation</span>
+              <div class="battle-filter-gen-list" id="battle-filter-gen-list"></div>
+            </div>
+            <div class="battle-filter-row">
+              <span class="battle-filter-section-label">Type</span>
+              <div class="battle-filter-type-list" id="battle-filter-type-list"></div>
+            </div>
+            <div class="battle-filter-footer">
+              <span class="battle-pool-count" id="battle-pool-count"></span>
+              <button class="battle-filter-reset" id="battle-filter-reset">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <button class="battle-start-btn" id="battle-start-btn">
+          <span class="battle-btn-pokeball" aria-hidden="true">
+            <span class="ball-top"></span>
+            <span class="ball-bottom"></span>
+            <span class="ball-center"></span>
+          </span>
+          Start Battle
+        </button>
+      </div>
+    </div>
+
+    <!-- Prediction question (appears above arena when predicting) -->
+    <!-- Arena -->
+    <div class="battle-arena" id="battle-arena" hidden>
+
+      <!-- Left combatant -->
+      <div class="battle-combatant battle-combatant--left" id="battle-left">
+        <div class="battle-label">Your Pokémon</div>
+        <div class="battle-pokeball-wrap" id="ball-left">
+          <div class="battle-pokeball" id="pokeball-left">
+            <div class="pokeball-top"></div>
+            <div class="pokeball-bottom"></div>
+            <div class="pokeball-band"></div>
+            <div class="pokeball-btn"></div>
+          </div>
+        </div>
+        <div class="battle-pokemon-reveal" id="reveal-left" hidden>
+          <div class="battle-particles" id="particles-left"></div>
+          <img class="battle-pokemon-img" id="img-left" src="" alt="" />
+          <div class="battle-pokemon-info">
+            <span class="battle-pokemon-name" id="name-left"></span>
+            <div class="battle-type-badges" id="types-left"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VS badge -->
+      <div class="battle-vs" id="battle-vs" hidden>
+        <span class="battle-vs-text">VS</span>
+      </div>
+
+      <!-- Right combatant -->
+      <div class="battle-combatant battle-combatant--right" id="battle-right">
+        <div class="battle-label">Opponent</div>
+        <div class="battle-pokeball-wrap" id="ball-right">
+          <div class="battle-pokeball" id="pokeball-right">
+            <div class="pokeball-top"></div>
+            <div class="pokeball-bottom"></div>
+            <div class="pokeball-band"></div>
+            <div class="pokeball-btn"></div>
+          </div>
+        </div>
+        <div class="battle-pokemon-reveal" id="reveal-right" hidden>
+          <div class="battle-particles" id="particles-right"></div>
+          <img class="battle-pokemon-img" id="img-right" src="" alt="" />
+          <div class="battle-pokemon-info">
+            <span class="battle-pokemon-name" id="name-right"></span>
+            <div class="battle-type-badges" id="types-right"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /battle-arena -->
+
+    <!-- Prediction UI: question + tie button (left/right picked by clicking the pokemon) -->
+    <div class="battle-predict" id="battle-predict" hidden>
+      <p class="battle-predict-question" id="battle-predict-question">Who do you think will win?</p>
+    </div>
+
+    <!-- Outcome banner -->
+    <div class="battle-outcome" id="battle-outcome" hidden>
+      <div class="battle-outcome-prediction" id="battle-outcome-prediction"></div>
+      <div class="battle-outcome-winner" id="battle-outcome-winner"></div>
+    </div>
+
+    <!-- Face Off results -->
+    <div class="battle-results" id="battle-results" hidden>
+      <div class="battle-results-inner">
+        <h3 class="battle-results-title">Face Off</h3>
+        <div class="faceoff-grid" id="faceoff-grid"></div>
+        <div class="battle-verdict" id="battle-verdict"></div>
+        <div class="battle-result-actions">
+          <button class="battle-next-btn" id="battle-next-btn">Next Battle →</button>
+          <button class="battle-reset-btn" id="battle-reset-btn">New Battle</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Victory banner -->
+    <div class="battle-victory" id="battle-victory" hidden>
+      <div class="battle-victory-stars" aria-hidden="true"></div>
+      <div class="battle-victory-inner">
+        <div class="battle-victory-trophy" aria-hidden="true">🏆</div>
+        <h2 class="battle-victory-title">Legendary Trainer!</h2>
+        <p class="battle-victory-subtitle">10 correct predictions in a row!</p>
+        <button class="battle-victory-btn" id="battle-victory-btn">Play Again</button>
+      </div>
+    </div>
+
+  </section><!-- /battle-section -->
 
   <!-- TCG Card Modal -->
   <div id="card-modal" class="modal-overlay" hidden aria-modal="true" role="dialog" aria-labelledby="modal-pokemon-name">
