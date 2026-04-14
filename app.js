@@ -1409,6 +1409,30 @@ function stopAllAudio() {
   });
 }
 
+// Unlock HTML5 Audio on mobile — iOS/Android require a user gesture before audio can play.
+// We silently play+pause each track on the first touchstart/mousedown anywhere on the page.
+(function() {
+  let unlocked = false;
+  function unlock() {
+    if (unlocked) return;
+    unlocked = true;
+    [startAudio, revealAudio, battleAudio, winnerAudio, defeatAudio, victoryAudio].forEach(a => {
+      const v = a.volume;
+      a.volume = 0;
+      const p = a.play();
+      if (p) p.then(() => { a.pause(); a.currentTime = 0; a.volume = v; }).catch(() => {});
+    });
+    // Also prime speech synthesis on iOS (must call from user gesture context)
+    if (window.speechSynthesis) {
+      const primer = new SpeechSynthesisUtterance('');
+      window.speechSynthesis.speak(primer);
+      window.speechSynthesis.cancel();
+    }
+  }
+  document.addEventListener('touchstart', unlock, { once: true, capture: true });
+  document.addEventListener('mousedown',  unlock, { once: true, capture: true });
+})();
+
 function updateStreakDisplay() {
   const streakEl = document.getElementById('battle-streak');
   const countEl  = document.getElementById('battle-streak-count');
@@ -1563,17 +1587,27 @@ function announceMatchup(left, right, onDone) {
     setTimeout(onDone, 1800);
     return;
   }
+  // iOS fix: resume if paused before cancelling
+  if (window.speechSynthesis.paused) window.speechSynthesis.resume();
   window.speechSynthesis.cancel();
-  const text = `${pokemonPhonetic(left)} versus ${pokemonPhonetic(right)}`;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang  = 'en-US';
-  utterance.rate  = 0.82;
-  utterance.pitch = 1.0;
-  utterance.onend = onDone;
-  // Fallback in case onend never fires (e.g. no voices loaded yet)
-  const fallback = setTimeout(onDone, 5000);
-  utterance.onend = () => { clearTimeout(fallback); onDone(); };
-  window.speechSynthesis.speak(utterance);
+
+  const doSpeak = () => {
+    const text = `${pokemonPhonetic(left)} versus ${pokemonPhonetic(right)}`;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang  = 'en-US';
+    utterance.rate  = 0.82;
+    utterance.pitch = 1.0;
+    const fallback = setTimeout(onDone, 5000);
+    utterance.onend = () => { clearTimeout(fallback); onDone(); };
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // iOS needs a brief pause after cancel before a new utterance is accepted
+  if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    setTimeout(doSpeak, 150);
+  } else {
+    doSpeak();
+  }
 }
 
 // Shows prediction UI: question below arena, click pokemon to pick
@@ -1618,14 +1652,66 @@ function showPredictionUI() {
   revealRight.onclick = () => onPick('right');
 }
 
+// Fades out loser + VS, then uses FLIP to slide the winner into its natural
+// centered/top position.  Works on both desktop (flex-row → centre) and
+// mobile (flex-column → top) without needing to know any layout dimensions.
+function slideWinnerToCenter(winnerSide, loserSide) {
+  const vsEl     = document.getElementById('battle-vs');
+  const winnerEl = document.getElementById(`battle-${winnerSide}`);
+  const loserEl  = document.getElementById(`battle-${loserSide}`);
+
+  // Step 1: Fade out loser and VS
+  loserEl.style.transition = 'opacity 0.4s ease';
+  loserEl.style.opacity    = '0';
+  vsEl.style.transition    = 'opacity 0.35s ease';
+  vsEl.style.opacity       = '0';
+
+  // Step 2: After the fade, trigger the FLIP animation
+  setTimeout(() => {
+    // FIRST: record winner's current screen position (with loser/VS still in DOM)
+    const firstRect = winnerEl.getBoundingClientRect();
+
+    // Remove loser and VS from layout — browser re-centres the winner
+    loserEl.style.display    = 'none';
+    loserEl.style.opacity    = '';
+    loserEl.style.transition = '';
+    vsEl.hidden              = true;
+    vsEl.style.opacity       = '';
+    vsEl.style.transition    = '';
+
+    // LAST: record winner's new screen position (naturally centred/topped by flex)
+    const lastRect = winnerEl.getBoundingClientRect();
+
+    const dx = firstRect.left - lastRect.left;
+    const dy = firstRect.top  - lastRect.top;
+
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+      // Apply inverse transform so winner still appears at its old position (no jump)
+      winnerEl.style.transition = 'none';
+      winnerEl.style.transform  = `translate(${dx}px, ${dy}px)`;
+
+      // Next frame: animate from old position to new (natural) position
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          winnerEl.style.transition = 'transform 0.55s cubic-bezier(0.4, 0, 0.2, 1)';
+          winnerEl.style.transform  = '';
+        });
+      });
+    }
+  }, 430);
+}
+
 // 13-second battle animation sequence
 function runBattleAnimation() {
   battleState.phase = 'battling';
   stopAllAudio();
   battleAudio.play().catch(() => {}); // start looping battle music
 
-  // Winner determined by base stats — worn-down stats are for display only
-  const winner = determineWinner(battleState.leftPokemon.stats, battleState.rightPokemon.stats);
+  // Winner determined by effective stats: champion uses worn-down stats, challenger uses base
+  const prevChampSide = battleState.championSide;
+  const effLeftStats  = (prevChampSide === 'left'  && battleState.championCurrentStats) ? battleState.championCurrentStats : battleState.leftPokemon.stats;
+  const effRightStats = (prevChampSide === 'right' && battleState.championCurrentStats) ? battleState.championCurrentStats : battleState.rightPokemon.stats;
+  const winner = determineWinner(effLeftStats, effRightStats);
   const isTie  = winner === 'tie';
   const loser  = isTie ? null : (winner === 'left' ? 'right' : 'left');
 
@@ -1680,7 +1766,7 @@ function runBattleAnimation() {
       loserImg.classList.add('fainted');
     }, 11500);
 
-    // t=12.5s — winner celebrates
+    // t=12.5s — winner celebrates, then fade out loser+VS and slide winner to center/top
     setTimeout(() => {
       const winnerImg = winner === 'left' ? imgLeft : imgRight;
       winnerImg.style.color = typeColor(
@@ -1690,6 +1776,7 @@ function runBattleAnimation() {
       );
       winnerImg.classList.remove('battling');
       winnerImg.classList.add('won');
+      slideWinnerToCenter(winner, loser);
     }, 12500);
   }
 
@@ -1787,8 +1874,10 @@ function showBattleResult(winner) {
 
     // Normal win: show face-off + next/reset buttons
     buildFaceOff(left, right, winner, remainingStats, winnerPreStats, loserEffStats);
-    document.getElementById('battle-results').hidden = false;
-    document.getElementById('battle-next-btn').onclick  = startNextBattle;
+    document.getElementById('battle-results').hidden   = false;
+    document.getElementById('battle-next-btn').hidden  = false;
+    document.getElementById('battle-reset-btn').classList.remove('battle-reset-btn--defeat');
+    document.getElementById('battle-next-btn').onclick = startNextBattle;
     document.getElementById('battle-reset-btn').onclick = () => {
       window.speechSynthesis && window.speechSynthesis.cancel();
       stopAllAudio();
@@ -1806,19 +1895,23 @@ function showBattleResult(winner) {
     defeatAudio.play().catch(() => {});
     correctStreak = 0;
 
-    // Auto-reset to start view after defeat audio (or 3s fallback)
-    const resetAfterDefeat = () => {
+    // Show face-off with only the red "New Battle" button — no auto-reset
+    buildFaceOff(left, right, winner, remainingStats, winnerPreStats, loserEffStats);
+    document.getElementById('battle-results').hidden  = false;
+    document.getElementById('battle-next-btn').hidden = true;
+    document.getElementById('battle-reset-btn').classList.add('battle-reset-btn--defeat');
+
+    document.getElementById('battle-reset-btn').onclick = () => {
       window.speechSynthesis && window.speechSynthesis.cancel();
       stopAllAudio();
-      document.getElementById('battle-streak').hidden = true;
+      correctStreak = 0;
+      document.getElementById('battle-streak').hidden  = true;
+      document.getElementById('battle-results').hidden = true;
       document.getElementById('battle-outcome').hidden = true;
       document.getElementById('battle-arena').hidden   = true;
       document.getElementById('battle-vs').hidden      = true;
       initBattlePage();
     };
-
-    const fallback = setTimeout(resetAfterDefeat, 3500);
-    defeatAudio.onended = () => { clearTimeout(fallback); resetAfterDefeat(); };
   }
 }
 
@@ -1977,21 +2070,18 @@ function startNextBattle() {
   if (battleState.phase !== 'result') return;
   window.speechSynthesis && window.speechSynthesis.cancel();
 
-  const championSide   = battleState.championSide;
-  const challengerSide = championSide === 'left' ? 'right' : 'left';
+  const champion      = battleState[`${battleState.championSide}Pokemon`];
+  const pool          = getFilteredBattlePool().filter(p => p.id !== champion.id);
+  const newChallenger = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : champion;
 
-  // Pick a new challenger that isn't the current champion
-  const champion = battleState[`${championSide}Pokemon`];
-  const pool = getFilteredBattlePool().filter(p => p.id !== champion.id);
-  const newChallenger = pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : champion; // fallback: same pokemon if pool too small
-
-
-  // Update state
-  battleState[`${challengerSide}Pokemon`] = newChallenger;
-  battleState.phase          = 'revealing';
-  battleState.userPrediction = null;
-  battleState.winner         = null;
-  battleState.isRunning      = true;
+  // Champion always goes on the left (top on mobile) for the next battle
+  battleState.leftPokemon         = champion;
+  battleState.rightPokemon        = newChallenger;
+  battleState.championSide        = 'left';
+  battleState.phase               = 'revealing';
+  battleState.userPrediction      = null;
+  battleState.winner              = null;
+  battleState.isRunning           = true;
 
   // Hide result panels and prediction UI
   document.getElementById('battle-results').hidden = true;
@@ -2000,74 +2090,102 @@ function startNextBattle() {
   document.getElementById('battle-vs').hidden      = true;
   document.getElementById('battle-arena').classList.remove('predicting');
 
-  // Clear prediction selection on both sides
+  // Hide champion immediately (no transition) so the transform/layout reset is invisible
+  const champEl = document.getElementById('battle-left');
+  champEl.style.transition = 'none';
+  champEl.style.opacity    = '0';
+
+  // Fully reset both combatant containers (clear transforms, fades, prediction styles)
   ['left', 'right'].forEach(s => {
-    document.getElementById(`battle-${s}`).classList.remove('predict-selected');
+    const c = document.getElementById(`battle-${s}`);
+    c.classList.remove('predict-selected');
+    c.style.removeProperty('--pokemon-type-color');
+    c.style.transition = 'none';
+    c.style.opacity    = s === 'left' ? '0' : '';
+    c.style.transform  = '';
+    c.style.display    = '';
   });
 
-  // Update labels
-  document.querySelector(`#battle-${championSide} .battle-label`).textContent   = 'Champion';
-  document.querySelector(`#battle-${challengerSide} .battle-label`).textContent = 'Challenger';
+  // Labels: champion always left, challenger always right
+  document.querySelector('#battle-left  .battle-label').textContent = 'Champion';
+  document.querySelector('#battle-right .battle-label').textContent = 'Challenger';
 
-  // Reset champion's animation state (remove battle classes, keep image)
-  const champImg = document.getElementById(`img-${championSide}`);
-  champImg.classList.remove('won', 'battling', 'weakening', 'fainted');
+  // ── Left side: champion (instant reveal — image already cached) ──
+  const champReveal = document.getElementById('reveal-left');
+  const champWrap   = document.getElementById('ball-left');
+  const champImg    = document.getElementById('img-left');
+
+  champImg.src = champion.imageUrl;
+  champImg.alt = champion.displayName;
+  champImg.addEventListener('error', () => {
+    if (champImg.src !== champion.fallbackUrl) champImg.src = champion.fallbackUrl;
+  }, { once: true });
+  champImg.className   = 'battle-pokemon-img revealed';
   champImg.style.color = '';
 
-  // Reset challenger side fully
-  const challengerReveal = document.getElementById(`reveal-${challengerSide}`);
-  const challengerWrap   = document.getElementById(`ball-${challengerSide}`);
-  const challengerBall   = document.getElementById(`pokeball-${challengerSide}`);
+  document.getElementById('name-left').textContent = champion.displayName;
+  const typesLeft = document.getElementById('types-left');
+  typesLeft.innerHTML = '';
+  champion.types.forEach(type => {
+    const badge = document.createElement('span');
+    badge.className        = 'type-badge';
+    badge.textContent      = type;
+    badge.style.background = typeColor(type);
+    typesLeft.appendChild(badge);
+  });
 
-  // Fade out old reveal, then swap in pokeball
-  challengerReveal.style.transition = 'opacity 0.3s ease';
-  challengerReveal.style.opacity    = '0';
+  champReveal.hidden = false;
+  champReveal.classList.remove('effect-ground');
+  if (champion.types[0] === 'ground') champReveal.classList.add('effect-ground');
+  champReveal.querySelector('.battle-pokemon-info').classList.add('revealed');
+  document.getElementById('particles-left').innerHTML = '';
+  champWrap.style.display = 'none';
+
+  // ── Right side: challenger (pokeball sequence) ──
+  const challReveal = document.getElementById('reveal-right');
+  const challWrap   = document.getElementById('ball-right');
+  const challBall   = document.getElementById('pokeball-right');
+
+  challReveal.style.transition = 'opacity 0.3s ease';
+  challReveal.style.opacity    = '0';
   setTimeout(() => {
-    // Reset reveal container
-    challengerReveal.hidden       = true;
-    challengerReveal.style.opacity = '';
-    challengerReveal.style.transition = '';
-    challengerReveal.classList.remove('effect-ground');
-    const oldImg = document.getElementById(`img-${challengerSide}`);
-    oldImg.classList.remove('revealed', 'battling', 'weakening', 'fainted', 'won');
-    oldImg.style.color = '';
-    oldImg.src = '';
-    document.getElementById(`name-${challengerSide}`).textContent = '';
-    document.getElementById(`types-${challengerSide}`).innerHTML  = '';
-    document.getElementById(`particles-${challengerSide}`).innerHTML = '';
-    challengerReveal.querySelector('.battle-pokemon-info').classList.remove('revealed');
+    challReveal.hidden           = true;
+    challReveal.style.opacity    = '';
+    challReveal.style.transition = '';
+    challReveal.classList.remove('effect-ground');
 
-    // Show pokeball
-    challengerWrap.style.display = '';
-    challengerBall.className     = 'battle-pokeball pb-appeared';
+    const challImg = document.getElementById('img-right');
+    challImg.className   = 'battle-pokemon-img';
+    challImg.style.color = '';
+    challImg.src         = '';
+    document.getElementById('name-right').textContent    = '';
+    document.getElementById('types-right').innerHTML     = '';
+    document.getElementById('particles-right').innerHTML = '';
+    challReveal.querySelector('.battle-pokemon-info').classList.remove('revealed');
 
-    // Mini reveal sequence
+    // Show pokeball and VS immediately
+    challWrap.style.display = '';
+    challBall.className     = 'battle-pokeball pb-appeared';
+    document.getElementById('battle-vs').hidden = false;
+
+    // Fade champion back in now that position is settled
+    champEl.style.transition = 'opacity 0.3s ease';
+    champEl.style.opacity    = '1';
+
+    // Pokeball sequence
+    setTimeout(() => { challBall.classList.add('pb-shaking'); }, 200);
+    setTimeout(() => { openPokeball('right'); }, 1100);
     setTimeout(() => {
-      challengerBall.classList.add('pb-shaking');
-    }, 200);
-    setTimeout(() => {
-      openPokeball(challengerSide);
-    }, 1100);
-    setTimeout(() => {
-      revealPokemon(challengerSide, newChallenger);
-      createParticles(
-        document.getElementById(`particles-${challengerSide}`),
-        newChallenger.types[0]
-      );
+      revealPokemon('right', newChallenger);
+      createParticles(document.getElementById('particles-right'), newChallenger.types[0]);
     }, 1600);
+    // t=5600ms (relative) — 4s after challenger reveal: stop reveal audio, then announce
     setTimeout(() => {
-      // Also refresh champion particles
-      createParticles(
-        document.getElementById(`particles-${championSide}`),
-        champion.types[0]
-      );
-      document.getElementById('battle-vs').hidden = false;
-      announceMatchup(
-        battleState.leftPokemon,
-        battleState.rightPokemon,
-        showPredictionUI
-      );
-    }, 2200);
+      createParticles(document.getElementById('particles-left'), champion.types[0]);
+      revealAudio.pause();
+      revealAudio.currentTime = 0;
+      announceMatchup(battleState.leftPokemon, battleState.rightPokemon, showPredictionUI);
+    }, 5600);
   }, 350);
 }
 
@@ -2104,9 +2222,10 @@ function startBattle() {
   // Hide from flow immediately; the CSS absolute-positions it during the fade
   startEl.addEventListener('animationend', () => { startEl.hidden = true; }, { once: true });
 
-  // t=300ms — Show arena + pokeballs appear
+  // t=300ms — Show arena + VS + pokeballs appear
   setTimeout(() => {
     document.getElementById('battle-arena').hidden = false;
+    document.getElementById('battle-vs').hidden    = false;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         document.getElementById('pokeball-left').classList.add('pb-appeared');
@@ -2135,11 +2254,12 @@ function startBattle() {
     createParticles(document.getElementById('particles-right'), battleState.rightPokemon.types[0]);
   }, 2600);
 
-  // t=3000ms — VS badge + announcement → prediction UI
+  // t=6050ms — 4s after reveal: stop reveal audio, then announce → prediction UI
   setTimeout(() => {
-    document.getElementById('battle-vs').hidden = false;
+    revealAudio.pause();
+    revealAudio.currentTime = 0;
     announceMatchup(battleState.leftPokemon, battleState.rightPokemon, showPredictionUI);
-  }, 3000);
+  }, 6050);
 }
 
 function initBattlePage() {
@@ -2185,14 +2305,18 @@ function initBattlePage() {
     document.getElementById(`particles-${side}`).innerHTML = '';
     reveal.querySelector('.battle-pokemon-info').classList.remove('revealed');
 
-    // Reset combatant prediction state
+    // Reset combatant prediction state and any slide/fade styles
     const combatant = document.getElementById(`battle-${side}`);
     combatant.classList.remove('predict-selected');
     combatant.style.removeProperty('--pokemon-type-color');
+    combatant.style.opacity    = '';
+    combatant.style.transition = '';
+    combatant.style.transform  = '';
+    combatant.style.display    = '';
 
     // Reset combatant label
     const labelEl = combatant.querySelector('.battle-label');
-    if (labelEl) labelEl.textContent = side === 'left' ? 'Your Pokémon' : 'Opponent';
+    if (labelEl) labelEl.textContent = side === 'left' ? 'Your Pokémon' : 'Challenger';
   });
 
   // Reset state
