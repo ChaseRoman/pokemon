@@ -2215,6 +2215,20 @@ body {
   transform: translateY(-1px);
 }
 
+.battle-reset-btn--defeat {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  color: white;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition), box-shadow var(--transition);
+}
+
+.battle-reset-btn--defeat:hover {
+  background: #e60000;
+  border-color: #e60000;
+  color: white;
+  box-shadow: 0 6px 20px rgba(204, 0, 0, 0.4);
+}
+
 /* ----- Streak Counter ----- */
 .battle-streak {
   display: flex;
